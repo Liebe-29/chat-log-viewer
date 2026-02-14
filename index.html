@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ChatLog">
+  <meta name="theme-color" content="#e8e0f0">
+  <meta name="description" content="AIとの会話ログを美しく閲覧するためのビューアー">
+  <title>Chat Log Viewer</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- ========== ファイル一覧画面 ========== -->
+  <div id="file-list-screen" class="screen active">
+    <header class="app-header">
+      <div class="header-inner">
+        <h1 class="app-title">
+          <span class="app-icon">💬</span>
+          Chat Log Viewer
+        </h1>
+      </div>
+    </header>
+
+    <main class="file-list-main">
+      <div class="search-bar-wrapper">
+        <div class="search-bar">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="search-input" placeholder="ファイルを検索..." autocomplete="off">
+        </div>
+      </div>
+
+      <div id="file-cards-container" class="file-cards-container">
+        <!-- ファイルカードがここに動的に追加される -->
+      </div>
+
+      <div id="empty-state" class="empty-state">
+        <div class="empty-illustration">📂</div>
+        <p class="empty-title">会話ログがありません</p>
+        <p class="empty-description">マークダウンファイルを追加して<br>会話ログを読みやすく閲覧しましょう</p>
+      </div>
+    </main>
+
+    <button id="add-file-btn" class="fab" aria-label="ファイルを追加">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
+
+    <input type="file" id="file-input" accept=".md,.markdown,.txt" multiple style="display:none">
+  </div>
+
+  <!-- ========== 会話ビューア画面 ========== -->
+  <div id="viewer-screen" class="screen">
+    <header class="viewer-header">
+      <button id="back-btn" class="header-btn" aria-label="戻る">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+      </button>
+      <h2 id="viewer-title" class="viewer-title-text">ファイル名</h2>
+      <button id="toc-btn" class="header-btn" aria-label="目次">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="12" x2="15" y2="12"></line>
+          <line x1="3" y1="18" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </header>
+
+    <div id="conversation-container" class="conversation-container">
+      <!-- 会話がここにレンダリングされる -->
+    </div>
+
+    <!-- 目次パネル -->
+    <div id="toc-overlay" class="toc-overlay"></div>
+    <div id="toc-panel" class="toc-panel">
+      <div class="toc-header">
+        <h3>📑 目次</h3>
+        <button id="toc-close-btn" class="toc-close-btn" aria-label="閉じる">✕</button>
+      </div>
+      <ul id="toc-list" class="toc-list">
+        <!-- 目次項目がここに動的に追加される -->
+      </ul>
+    </div>
+
+    <!-- トップへ戻るボタン -->
+    <button id="scroll-top-btn" class="scroll-top-btn" aria-label="トップへ戻る">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="18 15 12 9 6 15"></polyline>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ========== 削除確認ダイアログ ========== -->
+  <div id="delete-dialog-overlay" class="dialog-overlay">
+    <div class="dialog">
+      <p class="dialog-message">このファイルを削除しますか？</p>
+      <div class="dialog-actions">
+        <button id="delete-cancel-btn" class="dialog-btn dialog-btn-cancel">キャンセル</button>
+        <button id="delete-confirm-btn" class="dialog-btn dialog-btn-confirm">削除</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>

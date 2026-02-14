@@ -1,0 +1,24 @@
+{
+    "name": "Chat Log Viewer",
+    "short_name": "ChatLog",
+    "description": "AIとの会話ログを美しく閲覧するビューアー",
+    "start_url": "./index.html",
+    "display": "standalone",
+    "background_color": "#f7f5fa",
+    "theme_color": "#e8e0f0",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "icons/icon-192.svg",
+            "sizes": "192x192",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "icons/icon-512.svg",
+            "sizes": "512x512",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+}
