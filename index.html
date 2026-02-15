@@ -28,6 +28,7 @@
           <span class="app-icon">💬</span>
           Chat Log Viewer
         </h1>
+        <button id="settings-btn" class="settings-btn" aria-label="設定">⚙️</button>
       </div>
     </header>
 
@@ -40,6 +41,14 @@
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
           <input type="text" id="search-input" placeholder="ファイルを検索..." autocomplete="off">
+        </div>
+      </div>
+
+      <!-- フォルダタブ -->
+      <div class="folder-tabs-wrapper">
+        <div id="folder-tabs" class="folder-tabs">
+          <button class="folder-tab active" data-folder="__all__">すべて</button>
+          <button class="folder-tab" data-folder="__uncategorized__">未分類</button>
         </div>
       </div>
 
@@ -108,6 +117,81 @@
         <polyline points="18 15 12 9 6 15"></polyline>
       </svg>
     </button>
+  </div>
+
+  <!-- ========== 設定パネル ========== -->
+  <div id="settings-overlay" class="settings-overlay"></div>
+  <div id="settings-panel" class="settings-panel">
+    <div class="settings-header">
+      <h3>⚙️ 設定</h3>
+      <button id="settings-close-btn" class="settings-close-btn" aria-label="閉じる">✕</button>
+    </div>
+
+    <!-- テーマ選択 -->
+    <div class="settings-section">
+      <div class="settings-section-title">🎨 テーマ</div>
+      <div class="theme-grid">
+        <div class="theme-card active" data-theme="lavender">
+          <div class="theme-card-icon">🪻</div>
+          <div class="theme-card-name">Lavender</div>
+          <div class="theme-card-preview">
+            <div class="theme-dot" style="background:#e8e0f0"></div>
+            <div class="theme-dot" style="background:#9b8cb8"></div>
+            <div class="theme-dot" style="background:#6d5f82"></div>
+          </div>
+        </div>
+        <div class="theme-card" data-theme="sakura">
+          <div class="theme-card-icon">🌸</div>
+          <div class="theme-card-name">Sakura</div>
+          <div class="theme-card-preview">
+            <div class="theme-dot" style="background:#fce4ec"></div>
+            <div class="theme-dot" style="background:#d4899e"></div>
+            <div class="theme-dot" style="background:#a0566b"></div>
+          </div>
+        </div>
+        <div class="theme-card" data-theme="mint">
+          <div class="theme-card-icon">🌿</div>
+          <div class="theme-card-name">Mint</div>
+          <div class="theme-card-preview">
+            <div class="theme-dot" style="background:#ddf0e8"></div>
+            <div class="theme-dot" style="background:#6aab96"></div>
+            <div class="theme-dot" style="background:#407a65"></div>
+          </div>
+        </div>
+        <div class="theme-card" data-theme="night">
+          <div class="theme-card-icon">🌙</div>
+          <div class="theme-card-name">Night</div>
+          <div class="theme-card-preview">
+            <div class="theme-dot" style="background:#242442"></div>
+            <div class="theme-dot" style="background:#8888cc"></div>
+            <div class="theme-dot" style="background:#b0b0e0"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- フォルダ管理 -->
+    <div class="settings-section">
+      <div class="settings-section-title">📁 フォルダ管理</div>
+      <div id="folder-manage-list" class="folder-manage-list">
+        <!-- フォルダ一覧がここに動的に追加される -->
+      </div>
+      <div class="folder-add-row">
+        <input type="text" id="folder-add-input" class="folder-add-input" placeholder="新しいフォルダ名..." maxlength="20">
+        <button id="folder-add-btn" class="folder-add-btn">追加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== フォルダ割り当てダイアログ ========== -->
+  <div id="folder-assign-overlay" class="folder-assign-overlay">
+    <div class="folder-assign-dialog">
+      <div class="folder-assign-title">📁 フォルダを選択</div>
+      <div id="folder-assign-list" class="folder-assign-list">
+        <!-- フォルダ選択肢がここに動的に追加される -->
+      </div>
+      <button id="folder-assign-cancel" class="folder-assign-cancel">キャンセル</button>
+    </div>
   </div>
 
   <!-- ========== 削除確認ダイアログ ========== -->
