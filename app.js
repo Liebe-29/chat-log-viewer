@@ -1,5 +1,6 @@
 /* ============================================
-   Chat Log Viewer - Main Application
+   Chat Log Viewer - Main Application (v2)
+   フォルダ機能 + テーマ切り替え
    ============================================ */
 
 (function () {
@@ -7,9 +8,11 @@
 
   // ---------- Constants ----------
   const DB_NAME = 'ChatLogViewerDB';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
   const STORE_NAME = 'files';
   const SCROLL_POS_PREFIX = 'scrollPos_';
+  const THEME_KEY = 'chatlog_theme';
+  const FOLDERS_KEY = 'chatlog_folders';
 
   // ---------- DOM Elements ----------
   const fileListScreen = document.getElementById('file-list-screen');
@@ -32,28 +35,157 @@
   const deleteCancelBtn = document.getElementById('delete-cancel-btn');
   const deleteConfirmBtn = document.getElementById('delete-confirm-btn');
 
+  // Settings
+  const settingsBtn = document.getElementById('settings-btn');
+  const settingsPanel = document.getElementById('settings-panel');
+  const settingsOverlay = document.getElementById('settings-overlay');
+  const settingsCloseBtn = document.getElementById('settings-close-btn');
+
+  // Folder tabs
+  const folderTabsContainer = document.getElementById('folder-tabs');
+
+  // Folder management in settings
+  const folderManageList = document.getElementById('folder-manage-list');
+  const folderAddInput = document.getElementById('folder-add-input');
+  const folderAddBtn = document.getElementById('folder-add-btn');
+
+  // Folder assign dialog
+  const folderAssignOverlay = document.getElementById('folder-assign-overlay');
+  const folderAssignList = document.getElementById('folder-assign-list');
+  const folderAssignCancel = document.getElementById('folder-assign-cancel');
+
   // ---------- State ----------
   let db = null;
   let allFiles = [];
   let currentFileId = null;
   let pendingDeleteId = null;
+  let currentFolder = '__all__';
+  let folders = [];
+  let pendingAssignFileId = null;
 
   // ---------- Initialize ----------
   async function init() {
-    configureMerked();
+    configureMarked();
+    loadTheme();
+    loadFolders();
     db = await openDB();
     await loadFileList();
+    renderFolderTabs();
     bindEvents();
     registerServiceWorker();
   }
 
-  function configureMerked() {
+  function configureMarked() {
     if (typeof marked !== 'undefined') {
       marked.setOptions({
         breaks: true,
         gfm: true,
       });
     }
+  }
+
+  // ---------- Theme ----------
+  function loadTheme() {
+    const saved = localStorage.getItem(THEME_KEY);
+    const theme = saved || 'lavender';
+    applyTheme(theme);
+  }
+
+  function applyTheme(theme) {
+    if (theme === 'lavender') {
+      document.body.removeAttribute('data-theme');
+    } else {
+      document.body.setAttribute('data-theme', theme);
+    }
+    localStorage.setItem(THEME_KEY, theme);
+
+    // Update active state in theme grid
+    document.querySelectorAll('.theme-card').forEach((card) => {
+      card.classList.toggle('active', card.dataset.theme === theme);
+    });
+  }
+
+  // ---------- Folders ----------
+  function loadFolders() {
+    const saved = localStorage.getItem(FOLDERS_KEY);
+    folders = saved ? JSON.parse(saved) : [];
+  }
+
+  function saveFolders() {
+    localStorage.setItem(FOLDERS_KEY, JSON.stringify(folders));
+  }
+
+  function addFolder(name) {
+    const trimmed = name.trim();
+    if (!trimmed) return false;
+    if (folders.includes(trimmed)) return false;
+    folders.push(trimmed);
+    saveFolders();
+    return true;
+  }
+
+  function removeFolder(name) {
+    folders = folders.filter((f) => f !== name);
+    saveFolders();
+    // Remove folder assignment from all files with this folder
+    allFiles.forEach(async (file) => {
+      if (file.folder === name) {
+        file.folder = '';
+        await dbPut(file);
+      }
+    });
+  }
+
+  function renderFolderTabs() {
+    folderTabsContainer.innerHTML = '';
+
+    const allTab = createFolderTab('すべて', '__all__');
+    const uncatTab = createFolderTab('未分類', '__uncategorized__');
+    folderTabsContainer.appendChild(allTab);
+    folderTabsContainer.appendChild(uncatTab);
+
+    folders.forEach((name) => {
+      folderTabsContainer.appendChild(createFolderTab(name, name));
+    });
+  }
+
+  function createFolderTab(label, value) {
+    const btn = document.createElement('button');
+    btn.className = 'folder-tab' + (currentFolder === value ? ' active' : '');
+    btn.dataset.folder = value;
+    btn.textContent = label;
+    btn.addEventListener('click', () => {
+      currentFolder = value;
+      document.querySelectorAll('.folder-tab').forEach((t) => t.classList.remove('active'));
+      btn.classList.add('active');
+      applyFilters();
+    });
+    return btn;
+  }
+
+  function renderFolderManageList() {
+    folderManageList.innerHTML = '';
+
+    if (folders.length === 0) {
+      folderManageList.innerHTML = '<div class="folder-empty-msg">フォルダがまだありません</div>';
+      return;
+    }
+
+    folders.forEach((name) => {
+      const item = document.createElement('div');
+      item.className = 'folder-manage-item';
+      item.innerHTML = `
+        <span class="folder-manage-item-name">📁 ${escapeHtml(name)}</span>
+        <button class="folder-manage-delete" data-folder="${escapeHtml(name)}">削除</button>
+      `;
+      item.querySelector('.folder-manage-delete').addEventListener('click', () => {
+        removeFolder(name);
+        renderFolderManageList();
+        renderFolderTabs();
+        applyFilters();
+      });
+      folderManageList.appendChild(item);
+    });
   }
 
   // ---------- IndexedDB ----------
@@ -68,6 +200,14 @@
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
           store.createIndex('name', 'name', { unique: false });
           store.createIndex('addedAt', 'addedAt', { unique: false });
+          store.createIndex('folder', 'folder', { unique: false });
+        } else {
+          // Migration: add folder index if not exists
+          const tx = e.target.transaction;
+          const store = tx.objectStore(STORE_NAME);
+          if (!store.indexNames.contains('folder')) {
+            store.createIndex('folder', 'folder', { unique: false });
+          }
         }
       };
     });
@@ -113,8 +253,34 @@
   // ---------- File Management ----------
   async function loadFileList() {
     allFiles = await dbGetAll();
+    // Ensure all files have a folder field
+    allFiles.forEach((f) => {
+      if (typeof f.folder === 'undefined') f.folder = '';
+    });
     allFiles.sort((a, b) => b.addedAt - a.addedAt);
-    renderFileList(allFiles);
+    applyFilters();
+  }
+
+  function applyFilters() {
+    let filtered = allFiles;
+    const query = searchInput.value.trim().toLowerCase();
+
+    // Folder filter
+    if (currentFolder === '__uncategorized__') {
+      filtered = filtered.filter((f) => !f.folder);
+    } else if (currentFolder !== '__all__') {
+      filtered = filtered.filter((f) => f.folder === currentFolder);
+    }
+
+    // Search filter
+    if (query) {
+      filtered = filtered.filter((f) =>
+        f.name.toLowerCase().includes(query) ||
+        f.content.toLowerCase().includes(query)
+      );
+    }
+
+    renderFileList(filtered);
   }
 
   function renderFileList(files) {
@@ -137,7 +303,11 @@
       const date = new Date(file.addedAt);
       const dateStr = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
       const exchangeCount = countExchanges(file.content);
-      const preview = getFirstQuestion(file.content);
+
+      let folderLabel = '';
+      if (file.folder) {
+        folderLabel = `<div class="file-card-folder-label">📁 ${escapeHtml(file.folder)}</div>`;
+      }
 
       card.innerHTML = `
         <div class="file-card-top">
@@ -147,20 +317,35 @@
               <span>📅 ${dateStr}</span>
               <span>💬 ${exchangeCount}件のやり取り</span>
             </div>
+            ${folderLabel}
           </div>
-          <button class="file-card-delete" data-id="${file.id}" aria-label="削除">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"></polyline>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </svg>
-          </button>
+          <div class="file-card-actions">
+            <button class="file-card-btn file-card-folder-btn" data-id="${file.id}" aria-label="フォルダ">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </button>
+            <button class="file-card-btn file-card-delete" data-id="${file.id}" aria-label="削除">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+            </button>
+          </div>
         </div>
       `;
 
       // Click to open file
       card.addEventListener('click', (e) => {
-        if (e.target.closest('.file-card-delete')) return;
+        if (e.target.closest('.file-card-btn')) return;
         openFile(file.id);
+      });
+
+      // Folder button
+      const folderBtn = card.querySelector('.file-card-folder-btn');
+      folderBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showFolderAssignDialog(file.id);
       });
 
       // Delete button
@@ -197,6 +382,7 @@
         name: name,
         content: content,
         addedAt: Date.now(),
+        folder: '',
       };
       await dbPut(item);
     }
@@ -216,6 +402,55 @@
     return Date.now().toString(36) + Math.random().toString(36).slice(2);
   }
 
+  // ---------- Folder Assign Dialog ----------
+  function showFolderAssignDialog(fileId) {
+    pendingAssignFileId = fileId;
+    const file = allFiles.find((f) => f.id === fileId);
+    if (!file) return;
+
+    folderAssignList.innerHTML = '';
+
+    // "Uncategorized" option
+    const uncatItem = document.createElement('button');
+    uncatItem.className = 'folder-assign-item' + (!file.folder ? ' active' : '');
+    uncatItem.textContent = '未分類';
+    uncatItem.addEventListener('click', () => assignFolder(fileId, ''));
+    folderAssignList.appendChild(uncatItem);
+
+    // Folder options
+    folders.forEach((name) => {
+      const item = document.createElement('button');
+      item.className = 'folder-assign-item' + (file.folder === name ? ' active' : '');
+      item.textContent = '📁 ' + name;
+      item.addEventListener('click', () => assignFolder(fileId, name));
+      folderAssignList.appendChild(item);
+    });
+
+    if (folders.length === 0) {
+      const msg = document.createElement('div');
+      msg.className = 'folder-empty-msg';
+      msg.textContent = '設定からフォルダを作成してください';
+      folderAssignList.appendChild(msg);
+    }
+
+    folderAssignOverlay.classList.add('active');
+  }
+
+  function hideFolderAssignDialog() {
+    folderAssignOverlay.classList.remove('active');
+    pendingAssignFileId = null;
+  }
+
+  async function assignFolder(fileId, folderName) {
+    const file = allFiles.find((f) => f.id === fileId);
+    if (file) {
+      file.folder = folderName;
+      await dbPut(file);
+      applyFilters();
+    }
+    hideFolderAssignDialog();
+  }
+
   // ---------- Markdown Parser ----------
   function parseConversation(content) {
     // Split by --- (horizontal rule) that separates exchanges
@@ -229,7 +464,6 @@
       const exchange = { question: '', answer: '' };
 
       // Try to split by "# gemini response" or "# assistant response" etc.
-      // Pattern: starts with "# you asked" section, then "# ... response" section
       const responsePattern = /^(#\s+(?:gemini|assistant|ai|claude|gpt|chatgpt)\s+response)\s*$/im;
       const questionPattern = /^#\s+you\s+asked\s*$/im;
 
@@ -344,7 +578,6 @@
           } else {
             answerContent.classList.add('collapsed');
             toggleBtn.textContent = '▼ 続きを読む';
-            // Scroll to the top of this exchange
             block.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
         });
@@ -419,6 +652,20 @@
     document.body.style.overflow = '';
   }
 
+  // ---------- Settings Panel ----------
+  function openSettings() {
+    renderFolderManageList();
+    settingsPanel.classList.add('active');
+    settingsOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeSettings() {
+    settingsPanel.classList.remove('active');
+    settingsOverlay.classList.remove('active');
+    document.body.style.overflow = '';
+  }
+
   // ---------- Delete Dialog ----------
   function showDeleteDialog(id) {
     pendingDeleteId = id;
@@ -434,7 +681,8 @@
     if (pendingDeleteId) {
       await dbDelete(pendingDeleteId);
       localStorage.removeItem(SCROLL_POS_PREFIX + pendingDeleteId);
-      await loadFileList();
+      allFiles = allFiles.filter((f) => f.id !== pendingDeleteId);
+      applyFilters();
     }
     hideDeleteDialog();
   }
@@ -455,23 +703,6 @@
       currentFileId = null;
       window.scrollTo(0, 0);
     }
-  }
-
-  // ---------- Search ----------
-  function filterFiles(query) {
-    if (!query.trim()) {
-      renderFileList(allFiles);
-      return;
-    }
-
-    const q = query.toLowerCase();
-    const filtered = allFiles.filter((file) => {
-      return (
-        file.name.toLowerCase().includes(q) ||
-        file.content.toLowerCase().includes(q)
-      );
-    });
-    renderFileList(filtered);
   }
 
   // ---------- Scroll Top Button ----------
@@ -514,8 +745,8 @@
     });
 
     // Search
-    searchInput.addEventListener('input', (e) => {
-      filterFiles(e.target.value);
+    searchInput.addEventListener('input', () => {
+      applyFilters();
     });
 
     // Back button
@@ -540,20 +771,50 @@
       if (e.target === deleteDialogOverlay) hideDeleteDialog();
     });
 
+    // Settings
+    settingsBtn.addEventListener('click', openSettings);
+    settingsCloseBtn.addEventListener('click', closeSettings);
+    settingsOverlay.addEventListener('click', closeSettings);
+
+    // Theme cards
+    document.querySelectorAll('.theme-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        applyTheme(card.dataset.theme);
+      });
+    });
+
+    // Folder add
+    folderAddBtn.addEventListener('click', () => {
+      if (addFolder(folderAddInput.value)) {
+        folderAddInput.value = '';
+        renderFolderManageList();
+        renderFolderTabs();
+      }
+    });
+
+    folderAddInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        if (addFolder(folderAddInput.value)) {
+          folderAddInput.value = '';
+          renderFolderManageList();
+          renderFolderTabs();
+        }
+      }
+    });
+
+    // Folder assign dialog
+    folderAssignCancel.addEventListener('click', hideFolderAssignDialog);
+    folderAssignOverlay.addEventListener('click', (e) => {
+      if (e.target === folderAssignOverlay) hideFolderAssignDialog();
+    });
+
     // Handle back navigation (browser back button / swipe back)
     window.addEventListener('popstate', () => {
       if (viewerScreen.classList.contains('active')) {
         showScreen('list');
       }
     });
-
-    // Push state when opening viewer
-    const origOpenFile = openFile;
-    // Override handled via pushState in openFile — already managed via showScreen
   }
-
-  // Override openFile to handle history
-  const originalOpenFile = openFile;
 
   // ---------- Init ----------
   document.addEventListener('DOMContentLoaded', init);
